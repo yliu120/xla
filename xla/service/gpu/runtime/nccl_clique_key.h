@@ -53,13 +53,15 @@ TSL_LIB_GTL_DEFINE_INT_TYPE(NcclStreamId, uint64_t);
 // See more details in `nccl_clique` library.
 
 enum class AsyncStreamKind : int64_t {
-  kCollective = 0,  // Stream for asynchronous collective ops.
-  kP2P0 = 1,        // One Stream for P2P Send and Recv ops.
-  kP2P1 = 2,        // Another Stream for P2P Send and Recv ops.
+  kP2P0 = 0,        // One Stream for P2P Send and Recv ops.
+  kP2P1 = 1,        // Another Stream for P2P Send and Recv ops.
+  kCollective = 2,  // Stream for asynchronous collective ops.
 };
 
-constexpr static int64_t kAsyncStreamTotal =
-    static_cast<int64_t>(AsyncStreamKind::kP2P1) + 1;
+// Going forward, the total number of collective streams can grow organically.
+// The first two async streams are allocated for P2P and that number remains
+// static.
+constexpr static int64_t kAsyncStreamTotal = static_cast<int64_t>(kCollective);
 
 // Assigns a unique ID to a stream for asynchronous or synchronous execution.
 // These IDs can be used, for example, to look up the NCCL communicator.

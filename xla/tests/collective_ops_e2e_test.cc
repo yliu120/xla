@@ -259,6 +259,58 @@ XLA_TEST_P(AsyncCollectiveOps, AsyncAllGather) {
   }
 }
 
+using PureAsyncCollectiveOps = CollectiveOpsTestE2E;
+XLA_TEST_F(PureAsyncCollectiveOps, AsyncAllGatherConcurrently) {
+  const absl::string_view kModuleStr = R"(
+  HloModule test, is_scheduled=true, entry_computation_layout={()->u32[4]{0}}, replica_count=2
+
+  ENTRY test_computation {
+    %a0_1 = u32[1,2]{1,0} constant({ { 10, 15 } })
+    %id.1 = u32[] replica-id()
+    %id.2 = u32[1,2]{1,0} broadcast(%id.1), dimensions={}
+    %add.1 = u32[1,2]{1,0} add(u32[1,2]{1,0} %a0_1, u32[1,2]{1,0} %id.2)
+    %all-gather-start = (u32[1,2]{1,0}, u32[2,2]{1,0}) all-gather-start(u32[1,2]{1,0} %add.1), replica_groups={}, dimensions={0},
+      backend_config={"operation_queue_id":"0","wait_on_operation_queues":[],
+                      "collective_backend_config":{"is_sync":false,"no_parallel_custom_call":false,"stream_id":"2"},
+                      "force_earliest_schedule":false}
+    %all-gather-start.1 = (u32[1,2]{1,0}, u32[2,2]{1,0}) all-gather-start(u32[1,2]{1,0} %add.1), replica_groups={}, dimensions={0},
+      backend_config={"operation_queue_id":"0","wait_on_operation_queues":[],
+                      "collective_backend_config":{"is_sync":false,"no_parallel_custom_call":false,"stream_id":"3"},
+                      "force_earliest_schedule":false}
+    %all-gather-done = u32[2,2]{1,0} all-gather-done((u32[1,2]{1,0}, u32[2,2]{1,0}) %all-gather-start)
+    %all-gather-done.1 = u32[2,2]{1,0} all-gather-done((u32[1,2]{1,0}, u32[2,2]{1,0}) %all-gather-start.1)
+    %add.2 = u32[2,2]{1,0} add(u32[2,2]{1,0} %all-gather-done, u32[2,2]{1,0} %all-gather-done.1)
+    ROOT %bitcast.17 = u32[4]{0} bitcast(u32[2,2]{1,0} %add.2)
+  }
+  )";
+  const int64_t kNumReplicas = 2;
+
+  DebugOptions debug_options = GetDebugOptionsForTest();
+  debug_options.add_xla_disable_hlo_passes(
+      "gpu-convert-async-collectives-to-sync");
+  debug_options.set_xla_gpu_nccl_collective_streams(2);
+  HloModuleConfig config =
+      GetModuleConfigForTest(/*replica_count=*/kNumReplicas);
+  config.set_debug_options(debug_options);
+
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(kModuleStr, config));
+  TF_ASSERT_OK_AND_ASSIGN(auto executable,
+                          CreateExecutable(std::move(module),
+                                           /*run_hlo_passes=*/false));
+
+  EXPECT_TRUE(executable->has_module());
+  LOG(INFO) << "compiled module: " << executable->module().ToString();
+
+  TF_ASSERT_OK_AND_ASSIGN(std::vector<Literal> results,
+                          ExecuteReplicated(executable.get(), kNumReplicas));
+
+  ASSERT_EQ(results.size(), kNumReplicas);
+  for (const Literal& result : results) {
+    LiteralTestUtil::ExpectR1Equal<uint32_t>({20, 30, 22, 32}, result);
+  }
+}
+
 XLA_TEST_P(AsyncCollectiveOps, AsyncAllGatherMixedTypes) {
   const absl::string_view kModuleStr = R"(
   HloModule test

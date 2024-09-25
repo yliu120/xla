@@ -339,6 +339,19 @@ absl::Status RendezvousAfterInitialization(
     const ServiceExecutableRunOptions* run_options,
     const DebugOptions* debug_options);
 
+int32_t GetNumAsyncCollectiveStreams(const SequentialThunk& thunk_sequence) {
+  absl::flat_hash_set<int32_t> async_stream_ids;
+  for (auto& thunk : thunk_sequence) {
+    if (!thunk->IsCollective()) {
+      continue;
+    }
+    auto* nccl_collective_thunk =
+        tensorflow::down_cast<NcclCollectiveThunk*>(thunk.get());
+    async_stream_ids.insert(nccl_collective_thunk.config().stream_id);
+  }
+  return async_stream_ids.size();
+}
+
 absl::Status ExecuteThunks(
     const DebugOptions* debug_options, const std::string& module_name,
     ModuleIdentifier module_id, SequentialThunk& thunk_sequence,
@@ -372,17 +385,19 @@ absl::Status ExecuteThunks(
   }
 
   // Borrow streams required for NcclCollectiveThunk.
-  absl::InlinedVector<se::Stream*, kAsyncStreamTotal> async_comms_streams(
-      kAsyncStreamTotal, nullptr);
+  int num_async_collective_streams =
+      GetNumAsyncCollectiveStreams(thunk_sequence) + kAsyncStreamTotal;
+  std::vector<se::Stream*> async_comms_streams(num_async_collective_streams,
+                                               nullptr);
   se::Stream* command_buffer_trace_stream = nullptr;
   std::vector<StreamPool::Ptr> async_comms_streams_ownr;
   StreamPool::Ptr borrowed_command_buffer_trace_stream;
   if (run_options->HasStreamBorrower()) {
-    TF_ASSIGN_OR_RETURN(
-        async_comms_streams_ownr,
-        run_options->BorrowStreams(executor->device_ordinal(),
-                                   kAsyncStreamTotal, stream_priority));
-    for (int64_t i = 0; i < kAsyncStreamTotal; ++i) {
+    TF_ASSIGN_OR_RETURN(async_comms_streams_ownr,
+                        run_options->BorrowStreams(executor->device_ordinal(),
+                                                   num_async_collective_streams,
+                                                   stream_priority));
+    for (int64_t i = 0; i < num_async_collective_streams; ++i) {
       async_comms_streams[i] = async_comms_streams_ownr[i].get();
     }
 
