@@ -61,7 +61,8 @@ enum class AsyncStreamKind : int64_t {
 // Going forward, the total number of collective streams can grow organically.
 // The first two async streams are allocated for P2P and that number remains
 // static.
-constexpr static int64_t kAsyncStreamTotal = static_cast<int64_t>(kCollective);
+constexpr static int64_t kAsyncStreamTotal =
+    static_cast<int64_t>(AsyncStreamKind::kCollective);
 
 // Assigns a unique ID to a stream for asynchronous or synchronous execution.
 // These IDs can be used, for example, to look up the NCCL communicator.

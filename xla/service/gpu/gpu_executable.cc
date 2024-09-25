@@ -52,6 +52,7 @@ limitations under the License.
 #include "xla/service/gpu/runtime/for_all_thunks.h"
 #include "xla/service/gpu/runtime/nccl_clique.h"
 #include "xla/service/gpu/runtime/nccl_clique_key.h"
+#include "xla/service/gpu/runtime/nccl_collective_thunk.h"
 #include "xla/service/gpu/runtime/sequential_thunk.h"
 #include "xla/service/gpu/runtime/thunk.h"
 #include "xla/service/gpu/stream_executor_util.h"
@@ -339,16 +340,19 @@ absl::Status RendezvousAfterInitialization(
     const ServiceExecutableRunOptions* run_options,
     const DebugOptions* debug_options);
 
-int32_t GetNumAsyncCollectiveStreams(const SequentialThunk& thunk_sequence) {
-  absl::flat_hash_set<int32_t> async_stream_ids;
-  for (auto& thunk : thunk_sequence) {
-    if (!thunk->IsCollective()) {
-      continue;
-    }
-    auto* nccl_collective_thunk =
-        tensorflow::down_cast<NcclCollectiveThunk*>(thunk.get());
-    async_stream_ids.insert(nccl_collective_thunk.config().stream_id);
-  }
+int32_t GetNumAsyncCollectiveStreams(const SequentialThunk& thunks) {
+  absl::flat_hash_set<int32_t> async_stream_ids = {0};
+
+  ForAllThunks(
+      [&](const Thunk* thunk) {
+        auto* collective_thunk =
+            dynamic_cast<const NcclCollectiveThunk*>(thunk);
+        if (collective_thunk == nullptr) {
+          return;
+        }
+        async_stream_ids.insert(collective_thunk->config().stream_id);
+      },
+      &thunks);
   return async_stream_ids.size();
 }
 

@@ -290,7 +290,6 @@ XLA_TEST_F(PureAsyncCollectiveOps, AsyncAllGatherConcurrently) {
   DebugOptions debug_options = GetDebugOptionsForTest();
   debug_options.add_xla_disable_hlo_passes(
       "gpu-convert-async-collectives-to-sync");
-  debug_options.set_xla_gpu_nccl_collective_streams(2);
   HloModuleConfig config =
       GetModuleConfigForTest(/*replica_count=*/kNumReplicas);
   config.set_debug_options(debug_options);
