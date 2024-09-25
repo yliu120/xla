@@ -25,3 +25,10 @@ tools/python_bin_path.sh
 *.VC.opendb
 *.suo
 *.user
+
+# Ignore bazel configurations
+MODULE.bazel
+MODULE.bazel.lock
+WORKSPACE
+BUILD.bazel
+.cache/
