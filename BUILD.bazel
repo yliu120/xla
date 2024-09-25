@@ -12,3 +12,13 @@ license(
     package_name = "xla",
     license_kinds = ["@rules_license//licenses/spdx:Apache-2.0"],
 )
+
+refresh_compile_commands(
+    name = "refresh_compile_commands",
+
+    # Specify the targets of interest.
+    # For example, specify a dict of targets and any flags required to build.
+    targets = {
+      "//xla/service:latency_hiding_scheduler": "",
+    },
+)
