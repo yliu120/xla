@@ -184,12 +184,12 @@ class NcclCollectiveThunk : public Thunk {
     return ExecutionStreamId(execution_stream_id().value() +
                              nccl_stream_id().value());
   }
+  virtual const NcclCollectiveConfig& config() const = 0;
 
  protected:
   virtual absl::Status RunNcclCollective(
       const ExecuteParams& params, se::Stream& stream,
       NcclCommHandleWrapper comm_wrapper) = 0;
-  virtual const NcclCollectiveConfig& config() const = 0;
   virtual AsyncStreamKind GetAsyncStreamKind() const {
     return AsyncStreamKind::kCollective;
   }
