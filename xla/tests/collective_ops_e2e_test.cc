@@ -259,7 +259,9 @@ XLA_TEST_P(AsyncCollectiveOps, AsyncAllGather) {
   }
 }
 
+// Tests the behavior of async nccl collectives only.
 using PureAsyncCollectiveOps = CollectiveOpsTestE2E;
+
 XLA_TEST_F(PureAsyncCollectiveOps, AsyncAllGatherConcurrently) {
   const absl::string_view kModuleStr = R"(
   HloModule test, is_scheduled=true, entry_computation_layout={()->u32[4]{0}}, replica_count=2
