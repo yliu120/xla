@@ -42,6 +42,7 @@ limitations under the License.
 #include "xla/service/collective_ops_utils.h"
 #include "xla/service/computation_placer.h"
 #include "xla/service/global_device_id.h"
+#include "xla/service/gpu/backend_configs.pb.h"
 #include "xla/service/gpu/buffer_allocations.h"
 #include "xla/service/gpu/ir_emission_utils.h"
 #include "xla/service/gpu/runtime/nccl_api.h"
@@ -208,6 +209,17 @@ NcclCollectiveConfig GetNcclCollectiveConfig(
   config.group_mode = GetCollectiveOpGroupMode(hlo->channel_id().has_value(),
                                                use_global_device_ids)
                           .value();
+
+  config.stream_id = 0;
+  if (hlo->has_backend_config()) {
+    auto backend_config = hlo->backend_config<GpuBackendConfig>();
+    TF_CHECK_OK(backend_config.status());
+    int32_t async_stream_id =
+        backend_config->collective_backend_config().stream_id();
+    if (async_stream_id != 0) {
+      config.stream_id = async_stream_id;
+    }
+  }
 
   return config;
 }
@@ -434,10 +446,17 @@ absl::Status NcclCollectiveThunk::ExecuteOnStream(const ExecuteParams& params) {
                   config().replica_groups, config().group_mode, stream_id,
                   stream_kind));
   se::StreamExecutor* executor = params.stream->parent();
-  int64_t async_stream_idx = static_cast<int64_t>(stream_kind);
+  int64_t async_stream_idx = config().stream_id != 0
+                                 ? static_cast<int64_t>(config().stream_id)
+                                 : static_cast<int64_t>(stream_kind);
 
   if (IsAsync()) {
     // Launch collective operation on an async stream.
+    int64_t num_async_streams = params.collective_params->async_streams.size();
+    CHECK_LT(async_stream_idx, num_async_streams) << absl::StrFormat(
+        "The specified async collective stream {id: %d} exceeds the total "
+        "number of streams {%d}.",
+        async_stream_idx, num_async_streams);
     se::Stream& async_stream =
         *params.collective_params->async_streams.at(async_stream_idx);
 

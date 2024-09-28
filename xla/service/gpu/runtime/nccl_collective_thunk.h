@@ -63,6 +63,7 @@ struct NcclCollectiveConfig {
   RendezvousKey::CollectiveOpKind collective_op_kind;
   int64_t op_id;
   CollectiveOpGroupMode group_mode;
+  int32_t stream_id;
 
   template <typename OpT>
   void SetCollectiveOpKindAndID(OpT op);
@@ -176,6 +177,11 @@ class NcclCollectiveThunk : public Thunk {
   }
 
   NcclStreamId nccl_stream_id() const {
+    if (config().stream_id != 0) {
+      // The compiler assigns an ID.
+      // To avoid collisions, always follows the convention of stream_id + 1.
+      return NcclStreamId(static_cast<uint64_t>(config().stream_id) + 1);
+    }
     return xla::gpu::GetStreamId(IsAsync(), GetAsyncStreamKind());
   }
 
@@ -183,12 +189,12 @@ class NcclCollectiveThunk : public Thunk {
     return ExecutionStreamId(execution_stream_id().value() +
                              nccl_stream_id().value());
   }
+  virtual const NcclCollectiveConfig& config() const = 0;
 
  protected:
   virtual absl::Status RunNcclCollective(
       const ExecuteParams& params, se::Stream& stream,
       NcclCommHandleWrapper comm_wrapper) = 0;
-  virtual const NcclCollectiveConfig& config() const = 0;
   virtual AsyncStreamKind GetAsyncStreamKind() const {
     return AsyncStreamKind::kCollective;
   }

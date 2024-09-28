@@ -124,6 +124,8 @@ message BitcastBackendConfig {
 message CollectiveBackendConfig {
   bool is_sync = 1;
   bool no_parallel_custom_call = 2;
+  // Specifies an async stream for this collective to run in.
+  int32 stream_id = 3;
 }
 
 // Backend config for cost model estimates.

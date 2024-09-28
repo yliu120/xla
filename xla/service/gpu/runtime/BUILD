@@ -899,6 +899,7 @@ cc_library(
         "//xla/service:computation_placer",
         "//xla/service:global_device_id",
         "//xla/service:rendezvous",
+        "//xla/service/gpu:backend_configs_cc",
         "//xla/service/gpu:buffer_allocations",
         "//xla/service/gpu:ir_emission_utils",
         "//xla/service/llvm_ir:llvm_util",
