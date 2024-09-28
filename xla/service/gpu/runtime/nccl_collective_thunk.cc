@@ -210,6 +210,7 @@ NcclCollectiveConfig GetNcclCollectiveConfig(
                                                use_global_device_ids)
                           .value();
 
+  config.stream_id = 0;
   if (hlo->has_backend_config()) {
     auto backend_config = hlo->backend_config<GpuBackendConfig>();
     TF_CHECK_OK(backend_config.status());

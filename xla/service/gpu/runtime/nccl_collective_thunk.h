@@ -177,6 +177,11 @@ class NcclCollectiveThunk : public Thunk {
   }
 
   NcclStreamId nccl_stream_id() const {
+    if (config().stream_id != 0) {
+      // The compiler assigns an ID.
+      // To avoid collisions, always follows the convention of stream_id + 1.
+      return NcclStreamId(static_cast<uint64_t>(config().stream_id) + 1);
+    }
     return xla::gpu::GetStreamId(IsAsync(), GetAsyncStreamKind());
   }
 

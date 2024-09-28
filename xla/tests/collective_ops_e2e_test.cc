@@ -301,7 +301,6 @@ XLA_TEST_F(PureAsyncCollectiveOps, AsyncAllGatherConcurrently) {
                                            /*run_hlo_passes=*/false));
 
   EXPECT_TRUE(executable->has_module());
-  LOG(INFO) << "compiled module: " << executable->module().ToString();
 
   TF_ASSERT_OK_AND_ASSIGN(std::vector<Literal> results,
                           ExecuteReplicated(executable.get(), kNumReplicas));
