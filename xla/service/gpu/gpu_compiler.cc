@@ -1662,6 +1662,32 @@ absl::Status GpuCompiler::OptimizeHloPostLayoutAssignment(
   pipeline.AddPass<HostMemoryTransferAsyncifier>(
       static_cast<int64_t>(stream_executor::MemoryType::kHost));
 
+  // Asyncifier custom calls with `is_async` annotations.
+  pipeline.AddPass<AsyncWrapper>([](HloInstruction* instr) {
+    if (instr->opcode() != HloOpcode::kCustomCall ||
+        instr->raw_backend_config_string().empty()) {
+      return false;
+    }
+    auto& backend_config_str = instr->raw_backend_config_string();
+  
+    mlir::DialectRegistry registry;
+    auto mlir_context = std::make_unique<mlir::MLIRContext>(registry);
+    mlir::Attribute attr = mlir::parseAttribute(
+        backend_config_str, mlir_context.get());
+    auto dict = mlir::dyn_cast_or_null<mlir::DictionaryAttr>(attr);
+    if (dict == nullptr) {
+      return false;
+    }
+    TF_ASSIGN_OR_RETURN(auto attributes, xla::ffi::BuildAttributesMap(dict));
+    constexpr absl::string_view kCompilerAttr = "compiler_attrs";
+    auto it = attributes.find(kCompilerAttr);
+    if (it == attributes.end()) {
+      return false;
+    }
+
+    // Removes the compiler_attrs
+    return true;
+  });
 #ifdef NDEBUG
   // Verify the module in non-debug builds. For debug builds, the verifier
   // already runs after every pass.
