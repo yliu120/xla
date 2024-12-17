@@ -2661,6 +2661,11 @@ bool ShardingPropagation::InferShardingFromOperands(
     }
     case HloOpcode::kCollectivePermute: {
       const HloInstruction* operand = PickRepresentativeOperand(instruction);
+      if (operand == nullptr) {
+        VLOG(2) << "Unable to pick a representative operand for instr: "
+                << instruction->ToString();
+        return false;
+      }
       return MaybeImproveInstructionSharding(operand->sharding(), instruction,
                                              may_combine_partial_sharding);
     }
