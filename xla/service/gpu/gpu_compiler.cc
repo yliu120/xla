@@ -179,6 +179,7 @@ limitations under the License.
 #include "xla/service/gpu/reduce_scatter_combiner.h"
 #include "xla/service/gpu/reduction_utils.h"
 #include "xla/service/gpu/runtime_intrinsics.h"
+#include "xla/service/gpu/send_recv_partitioner.h"
 #include "xla/service/gpu/stream_executor_util.h"
 #include "xla/service/gpu/transforms/algebraic_simplifier.h"
 #include "xla/service/gpu/transforms/algorithm_checker.h"
@@ -222,6 +223,7 @@ limitations under the License.
 #include "xla/service/gpu/transforms/sanitize_constant_names.h"
 #include "xla/service/gpu/transforms/scatter_expander.h"
 #include "xla/service/gpu/transforms/scatter_slice_simplifier.h"
+#include "xla/service/gpu/transforms/send_recv_decomposer.h"
 #include "xla/service/gpu/transforms/softmax_rewriter_triton.h"
 #include "xla/service/gpu/transforms/sort_rewriter.h"
 #include "xla/service/gpu/transforms/stream_attribute_annotator.h"
@@ -602,6 +604,14 @@ absl::Status RunSPMDPasses(
 
   const int64_t num_partitions = hlo_module->config().num_partitions();
   if (num_partitions > 1 && hlo_module->config().use_spmd_partitioning()) {
+    // Register custom-call partitioner for SharBarrierFrom and ShardBarrierTo.
+    ABSL_CONST_INIT static absl::once_flag did_registration;
+    absl::call_once(did_registration, [] {
+      RegisterCustomCallPartitioner(
+          spmd::kSendCustomCall, std::make_unique<spmd::SendRecvPartitioner>());
+      RegisterCustomCallPartitioner(
+          spmd::kRecvCustomCall, std::make_unique<spmd::SendRecvPartitioner>());
+    });
     HloPassPipeline spmd_pipeline("spmd-partitioner");
     AddSPMDPasses(hlo_module, layout_insensitive_algsimp_opts,
                   gpu_target_config.device_description.gpu_compute_capability(),
@@ -648,6 +658,7 @@ absl::Status RunOptimizationPasses(
   pipeline.AddPass<TopKSplitter>();
   pipeline.AddPass<TopkSpecializer>();
   pipeline.AddPass<TopkDecomposer>();
+  pipeline.AddPass<SendRecvDecomposer>();
 
   HloPredicate upcaster_filter = [&](const HloInstruction* instr) {
     const auto* cuda_cc = std::get_if<se::CudaComputeCapability>(

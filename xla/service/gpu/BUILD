@@ -1398,6 +1398,7 @@ cc_library(
         ":prepare_hlo_for_ir_emitting_pipeline",
         ":reduction_utils",
         ":runtime_intrinsics",
+        ":send_recv_partitioner",
         ":stream_executor_util",
         "@com_google_absl//absl/base",
         "@com_google_absl//absl/container:flat_hash_map",
@@ -1536,6 +1537,7 @@ cc_library(
         "//xla/service/gpu/transforms:sanitize_constant_names",
         "//xla/service/gpu/transforms:scatter_expander",
         "//xla/service/gpu/transforms:scatter_slice_simplifier",
+        "//xla/service/gpu/transforms:send_recv_decomposer",
         "//xla/service/gpu/transforms:softmax_rewriter_triton",
         "//xla/service/gpu/transforms:sort_rewriter",
         "//xla/service/gpu/transforms:stream_attribute_annotator",
@@ -3306,5 +3308,16 @@ cc_library(
         "@com_google_absl//absl/synchronization",
         "@tsl//tsl/profiler/lib:traceme",
         "@tsl//tsl/profiler/lib:traceme_encode",
+    ],
+)
+
+
+cc_library(
+    name = "send_recv_partitioner",
+    hdrs = ["send_recv_partitioner.h"],
+    deps = [
+        "//xla/hlo/ir:hlo",
+        "//xla/service:custom_call_sharding_helper",
+        "//xla/service/spmd:spmd_partitioner",
     ],
 )
