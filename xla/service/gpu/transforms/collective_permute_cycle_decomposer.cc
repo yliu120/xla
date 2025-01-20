@@ -55,8 +55,6 @@ using SourceTargetPairs = std::vector<SourceTargetPair>;
 
 enum class CycleType { kUnknown, kForward, kBackward };
 
-constexpr absl::string_view kDecomposeAnnotation = "decompose";
-
 // Returns true if the CollectivePermute instruction has a cycle in its
 // source-target pairs and should be decomposed.
 CycleType ShouldDecomposeWithCycleType(
@@ -80,16 +78,6 @@ CycleType ShouldDecomposeWithCycleType(
   const SourceTargetPairs& pairs = collective_permute.source_target_pairs();
   if (pairs.size() == 1) {
     return CycleType::kUnknown;
-  }
-
-  auto it =
-      collective_permute.frontend_attributes().map().find(kDecomposeAnnotation);
-  if (it != collective_permute.frontend_attributes().map().end()) {
-    if (it->second == "forward") {
-      return CycleType::kForward;
-    } else if (it->second == "backward") {
-      return CycleType::kBackward;
-    }
   }
 
   return IsForwardCycle(pairs)    ? CycleType::kForward
