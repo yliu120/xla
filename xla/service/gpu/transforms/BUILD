@@ -3448,10 +3448,6 @@ cc_library(
     srcs = ["send_recv_decomposer.cc"],
     hdrs = ["send_recv_decomposer.h"],
     deps = [
-        "//xla:comparison_util",
-        "//xla:literal",
-        "//xla:literal_util",
-        "//xla:shape_util",
         "//xla/hlo/ir:hlo",
         "//xla/hlo/pass:hlo_pass",
         "//xla/hlo/transforms/simplifiers:hlo_dce",
