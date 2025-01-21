@@ -9,7 +9,6 @@
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/Parser/Parser.h"
-#include "xla/comparison_util.h"
 #include "xla/hlo/ir/hlo_computation.h"
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_instructions.h"
@@ -17,10 +16,7 @@
 #include "xla/hlo/ir/hlo_casting_utils.h"
 #include "xla/hlo/transforms/simplifiers/hlo_dce.h"
 #include "xla/hlo/utils/hlo_query.h"
-#include "xla/literal_util.h"
-#include "xla/literal.h"
 #include "xla/service/collective_ops_utils.h"
-#include "xla/shape_util.h"
 #include "xla/tsl/platform/errors.h"
 
 namespace xla::gpu {
@@ -32,11 +28,6 @@ constexpr absl::string_view kPermAttrName = "perm";
 
 // TODO: Uses upstream class after rebasing.
 using SourceTargetPairs = std::vector<std::pair<int64_t, int64_t>>;
-
-struct DecomposeContext {
-  // Cache an or computation for reduction added when decomposing recv.
-  HloComputation* or_computation;
-};
 
 std::string SourceTargetPairsString(
     const SourceTargetPairs& source_target_pairs) {
@@ -94,18 +85,6 @@ FrontendAttributes MakeSendRecvFrontendAttributes(
   return attributes;
 }
 
-HloComputation* CreateOrComputation(absl::string_view name, HloModule* module) {
-  auto builder = HloComputation::Builder(name);
-  Shape bool_shape = ShapeUtil::MakeShape(PRED, {});
-  auto lfs = builder.AddInstruction(
-      HloInstruction::CreateParameter(0, bool_shape, "x"));
-  auto rhs = builder.AddInstruction(
-      HloInstruction::CreateParameter(1, bool_shape, "y"));
-  builder.AddInstruction(
-      HloInstruction::CreateBinary(bool_shape, HloOpcode::kOr, lfs, rhs));
-  return module->AddEmbeddedComputation(builder.Build());
-}
-
 absl::Status DecomposeSend(HloCustomCallInstruction* custom_call,
                            int64_t& next_channel_id) {
   HloComputation* comp = custom_call->parent();
@@ -130,8 +109,7 @@ absl::Status DecomposeSend(HloCustomCallInstruction* custom_call,
 }
 
 absl::Status DecomposeRecv(HloCustomCallInstruction* custom_call,
-                           int64_t& next_channel_id,
-                           DecomposeContext* context) {
+                           int64_t& next_channel_id) {
   HloComputation* comp = custom_call->parent();
 
   auto* token = comp->AddInstruction(HloInstruction::CreateToken());
@@ -149,39 +127,7 @@ absl::Status DecomposeRecv(HloCustomCallInstruction* custom_call,
       comp->AddInstruction(HloInstruction::CreateGetTupleElement(recv_done, 0),
                            absl::StrCat(custom_call->name(), "-recv-data"));
 
-  // If the device is not in the source list, output the original output.
-  std::vector<int32_t> source_devices;
-  for (const auto& source_target_pair : source_target_pairs) {
-    source_devices.push_back(static_cast<int32_t>(source_target_pair.second));
-  }
-  Literal sources_literal = LiteralUtil::CreateR1<int32_t>(source_devices);
-  auto* constant = comp->AddInstruction(
-      HloInstruction::CreateConstant(std::move(sources_literal)));
-  auto* partition_id =
-      comp->AddInstruction(HloInstruction::CreatePartitionId());
-  auto* convert = comp->AddInstruction(HloInstruction::CreateConvert(
-      ShapeUtil::MakeScalarShape(S32), partition_id));
-  auto* broadcast = comp->AddInstruction(HloInstruction::CreateBroadcast(
-      constant->shape(), convert, /*broadcast_dimensions=*/{}));
-  auto* compare = comp->AddInstruction(HloInstruction::CreateCompare(
-      ShapeUtil::MakeShape(PRED, broadcast->shape().dimensions()), broadcast,
-      constant, ComparisonDirection::kEq));
-
-  if (context->or_computation == nullptr) {
-    context->or_computation = CreateOrComputation(
-        absl::StrCat("decomposed_recv", "_or"), comp->parent());
-  }
-  auto* init_value = comp->AddInstruction(
-      HloInstruction::CreateConstant(LiteralUtil::CreateR0<bool>(false)));
-  auto* reduce = comp->AddInstruction(HloInstruction::CreateReduce(
-      ShapeUtil::MakeScalarShape(PRED), compare, /*init_value=*/init_value,
-      /*dimensions_to_reduce=*/{0},
-      /*reduce_computation=*/context->or_computation));
-  auto* select = comp->AddInstruction(HloInstruction::CreateTernary(
-      recv_data->shape(), HloOpcode::kSelect, reduce, recv_data,
-      custom_call->mutable_operand(0)));
-
-  TF_RETURN_IF_ERROR(custom_call->ReplaceAllUsesWith(select));
+  TF_RETURN_IF_ERROR(custom_call->ReplaceAllUsesWith(recv_data));
   TF_RETURN_IF_ERROR(comp->RemoveInstruction(custom_call));
   return absl::OkStatus();
 }
@@ -192,7 +138,6 @@ absl::StatusOr<bool> SendRecvDecomposer::Run(
     const absl::flat_hash_set<absl::string_view>& execution_threads) {
   bool modified = false;
   int64_t next_channel_id = hlo_query::NextChannelId(*module);
-  auto context = std::make_unique<DecomposeContext>();
   for (HloComputation* computation : module->MakeComputationPostOrder()) {
     for (HloInstruction* instruction : computation->instructions()) {
       if (instruction->opcode() != HloOpcode::kCustomCall) {
@@ -204,8 +149,7 @@ absl::StatusOr<bool> SendRecvDecomposer::Run(
         TF_RETURN_IF_ERROR(DecomposeSend(custom_call, next_channel_id));
         modified = true;
       } else if (custom_call->custom_call_target() == kRecvCustomCallName) {
-        TF_RETURN_IF_ERROR(
-            DecomposeRecv(custom_call, next_channel_id, context.get()));
+        TF_RETURN_IF_ERROR(DecomposeRecv(custom_call, next_channel_id));
         modified = true;
       }
     }
