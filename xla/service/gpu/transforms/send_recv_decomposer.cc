@@ -111,11 +111,11 @@ absl::Status DecomposeSend(HloCustomCallInstruction* custom_call,
 absl::Status DecomposeRecv(HloCustomCallInstruction* custom_call,
                            int64_t& next_channel_id) {
   HloComputation* comp = custom_call->parent();
-
-  auto* token = comp->AddInstruction(HloInstruction::CreateToken());
-  auto* recv = comp->AddInstruction(
-      HloInstruction::CreateRecv(custom_call->shape(), token, next_channel_id,
-                                 /*is_host_transfer=*/false));
+  auto* after_all = comp->AddInstruction(HloInstruction::CreateAfterAll(
+      /*operands=*/{custom_call->mutable_operand(0)}));
+  auto* recv = comp->AddInstruction(HloInstruction::CreateRecv(
+      custom_call->shape(), after_all, next_channel_id,
+      /*is_host_transfer=*/false));
 
   SourceTargetPairs source_target_pairs = ParseSourceTargetMapFromBackendConfig(
       custom_call->raw_backend_config_string());
