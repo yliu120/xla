@@ -145,12 +145,39 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "custom_calls",
+    srcs = [
+        "custom_calls.cc",
+    ],
+    local_defines = if_cuda_is_configured(["GOOGLE_CUDA=1"]),
+    deps = [
+        "//xla:status_macros",
+        "//xla:xla_data_proto_cc",
+        "//xla/ffi",
+        "//xla/ffi:execution_context",
+        "//xla/ffi:ffi_api",
+        "//xla/service:platform_util",
+        "//xla/stream_executor:device_memory",
+        "//xla/stream_executor:stream",
+        "//xla/stream_executor/gpu:gpu_types_header",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
+    ]+ if_cuda_is_configured([
+        "@local_config_cuda//cuda:cuda_headers",
+    ]),
+    alwayslink = True,
+)
+
 xla_test(
     name = "custom_call_test",
     srcs = if_gpu_is_configured(["custom_call_test.cc"]),
     backends = ["gpu"],
     local_defines = if_cuda_is_configured(["GOOGLE_CUDA=1"]),
     deps = [
+        ":custom_calls",
         "//xla:debug_options_flags",
         "//xla:shape_util",
         "//xla:status_macros",
