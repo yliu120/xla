@@ -1552,6 +1552,7 @@ cc_library(
         "//xla/service/gpu/transforms:gemv_rewriter",
         "//xla/service/gpu/transforms:layout_assignment",
         "//xla/service/gpu/transforms:move_copy_to_users",
+        "//xla/service/gpu/transforms:nan_detector",
         "//xla/service/gpu/transforms:pipelined_p2p_rewriter",
         "//xla/service/gpu/transforms:ragged_all_to_all_decomposer",
         "//xla/service/gpu/transforms:reduce_scatter_creator",

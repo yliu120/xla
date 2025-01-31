@@ -321,6 +321,7 @@ DebugOptions DefaultDebugOptionsIgnoringFlags() {
   opts.set_xla_gpu_unsupported_enable_ragged_all_to_all_decomposer(false);
   opts.set_xla_gpu_experimental_pack_dot_operands_along_k_dimension(true);
   opts.set_xla_unsupported_crash_on_hlo_pass_fix_max_iterations(false);
+  opts.set_xla_gpu_nan_detection(false);
   return opts;
 }
 
@@ -2220,6 +2221,11 @@ void MakeDebugOptionsFlags(std::vector<tsl::Flag>* flag_list,
       debug_options->xla_unsupported_crash_on_hlo_pass_fix_max_iterations(),
       "Crash if HloPassFix can not converge after a fixed number of "
       "iterations."));
+
+  flag_list->push_back(tsl::Flag(
+      "xla_gpu_nan_detection",
+      bool_setter_for(&DebugOptions::set_xla_gpu_nan_detection),
+      debug_options->xla_gpu_nan_detection(), "Automatic nan detection."));
 }  // NOLINT(readability/fn_size)1
 
 // Allocates flag_values and flag_objects; this function must not be called more
