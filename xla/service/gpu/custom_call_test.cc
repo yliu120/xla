@@ -20,6 +20,8 @@ limitations under the License.
 #include <sstream>
 #include <string>
 #include <vector>
+#include "gmock/gmock.h"
+#include "xla/tsl/platform/errors.h"
 
 #if GOOGLE_CUDA
 #include "third_party/gpus/cuda/include/cuda.h"  // IWYU pragma: keep
@@ -57,6 +59,7 @@ limitations under the License.
 #include "xla/stream_executor/stream.h"
 #include "xla/tests/client_library_test_base.h"
 #include "xla/tsl/lib/core/status_test_util.h"
+#include "xla/tsl/platform/status_matchers.h"
 #include "xla/xla_data.pb.h"
 #include "tsl/platform/statusor.h"
 
@@ -877,6 +880,21 @@ TEST_F(CustomCallTest, FfiExecutionState) {
              /*api_version=*/CustomCallApiVersion::API_VERSION_TYPED_FFI);
 
   TF_ASSERT_OK(Execute(&b, {}).status());
+}
+
+TEST_F(CustomCallTest, CheckErrorAndReport) {
+  XlaBuilder b(TestName());
+  CustomCall(&b, "__xla_check_error",
+             /*operands=*/{ConstantR0WithType(&b, PRED, true)},
+             ShapeUtil::MakeShape(PRED, {}),
+             /*opaque=*/"{\"metadata\" = \"dummy_op\"}",
+             /*has_side_effect=*/false,
+             /*output_operand_aliasing=*/{}, /*literal=*/nullptr,
+             /*schedule=*/CustomCallSchedule::SCHEDULE_NONE,
+             /*api_version=*/CustomCallApiVersion::API_VERSION_TYPED_FFI);
+
+  // Unfortunately we cannot capture errors from cuda host callbacks.
+  EXPECT_DEATH(auto status = Execute(&b, {}).status(), "");
 }
 
 }  // anonymous namespace
