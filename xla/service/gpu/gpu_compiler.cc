@@ -211,6 +211,7 @@ limitations under the License.
 #include "xla/service/gpu/transforms/gemv_rewriter.h"
 #include "xla/service/gpu/transforms/layout_assignment.h"
 #include "xla/service/gpu/transforms/move_copy_to_users.h"
+#include "xla/service/gpu/transforms/nan_detector.h"
 #include "xla/service/gpu/transforms/pipelined_p2p_rewriter.h"
 #include "xla/service/gpu/transforms/ragged_all_to_all_decomposer.h"
 #include "xla/service/gpu/transforms/reduce_scatter_creator.h"
@@ -1312,6 +1313,16 @@ absl::Status RunDynamicSliceFusionPasses(HloModule* hlo_module,
   return absl::OkStatus();
 }
 
+absl::Status RunNanDetectionPass(HloModule* hlo_module) {
+  if (hlo_module->config().debug_options().xla_gpu_nan_detection()) {
+    HloPassPipeline pipeline("dynamic-slice");
+    pipeline.AddPass<NanDetector>();
+    TF_RETURN_IF_ERROR(pipeline.Run(hlo_module).status());
+  }
+
+  return absl::OkStatus();
+}
+
 }  // namespace
 
 absl::Status GpuCompiler::RunCollectiveScheduleLinearizerPasses(
@@ -1367,6 +1378,7 @@ absl::Status GpuCompiler::OptimizeHloModule(
       hlo_module, gpu_version, dnn_version,
       gpu_target_config.device_description.runtime_version()));
 
+  TF_RETURN_IF_ERROR(RunNanDetectionPass(hlo_module));
   TF_RETURN_IF_ERROR(
       RunLayoutAssignmentPasses(hlo_module, gpu_version, dnn_version,
                                 gpu_target_config.device_description));
