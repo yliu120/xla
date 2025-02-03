@@ -330,7 +330,17 @@ absl::Status CudaStream::DoHostCallbackWithStatus(
       [cb = std::move(callback), this]() mutable {
         absl::Status s = (std::move(cb))();
         if (!s.ok()) {
-          LOG(WARNING) << "Host callback failed: " << s;
+          LOG(ERROR) << "Host callback failed: " << s;
+        }
+        int num_pending_host_callbacks = num_pending_host_callbacks_.fetch_sub(
+                                             1, std::memory_order_acq_rel) -
+                                         1;
+        // num_pending_host_callbacks_ can theoretically reach -1 if this
+        // callback gets executed before we increase the counter on the main
+        // thread.
+        if (num_pending_host_callbacks == 0) {
+          absl::MutexLock lock(&mutex_);
+          no_pending_host_callbacks_ = num_pending_host_callbacks_ <= 0;
         }
         int num_pending_host_callbacks = num_pending_host_callbacks_.fetch_sub(
                                              1, std::memory_order_acq_rel) -
