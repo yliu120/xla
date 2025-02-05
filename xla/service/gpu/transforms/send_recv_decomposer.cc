@@ -24,6 +24,7 @@ namespace {
 
 constexpr absl::string_view kSendCustomCallName = "xla.gpu.send";
 constexpr absl::string_view kRecvCustomCallName = "xla.gpu.recv";
+constexpr absl::string_view kZerosCustomCallName = "xla.gpu.zeros";
 constexpr absl::string_view kPermAttrName = "perm";
 
 // TODO: Uses upstream class after rebasing.
@@ -89,7 +90,13 @@ absl::Status DecomposeSend(HloCustomCallInstruction* custom_call,
                            int64_t& next_channel_id) {
   HloComputation* comp = custom_call->parent();
 
-  auto* token = comp->AddInstruction(HloInstruction::CreateToken());
+  HloInstruction* token = nullptr;
+  if (custom_call->unique_operands().size() == 1) {
+    auto* token = comp->AddInstruction(HloInstruction::CreateToken());
+  } else {
+    auto* token = comp->AddInstruction(
+        HloInstruction::CreateAfterAll({custom_call->mutable_operand(1)}));
+  }
   auto* send = comp->AddInstruction(
       HloInstruction::CreateSend(custom_call->mutable_operand(0), token,
                                  next_channel_id, /*is_host_transfer=*/false));
@@ -131,6 +138,13 @@ absl::Status DecomposeRecv(HloCustomCallInstruction* custom_call,
   TF_RETURN_IF_ERROR(comp->RemoveInstruction(custom_call));
   return absl::OkStatus();
 }
+
+absl::Status DecomposeZeros(HloCustomCallInstruction* custom_call) {
+  HloComputation* comp = custom_call->parent();
+  TF_RETURN_IF_ERROR(
+      custom_call->ReplaceAllUsesWith(custom_call->mutable_operand(0)));
+  TF_RETURN_IF_ERROR(comp->RemoveInstruction(custom_call));
+}
 }  // namespace
 
 absl::StatusOr<bool> SendRecvDecomposer::Run(
@@ -147,11 +161,12 @@ absl::StatusOr<bool> SendRecvDecomposer::Run(
       auto* custom_call = Cast<HloCustomCallInstruction>(instruction);
       if (custom_call->custom_call_target() == kSendCustomCallName) {
         TF_RETURN_IF_ERROR(DecomposeSend(custom_call, next_channel_id));
-        modified = true;
       } else if (custom_call->custom_call_target() == kRecvCustomCallName) {
         TF_RETURN_IF_ERROR(DecomposeRecv(custom_call, next_channel_id));
-        modified = true;
+      } else if (custom_call->custom_call_target() == kZerosCustomCallName) {
+        TF_RETURN_IF_ERROR(DecomposeZeros(custom_call));
       }
+      modified = true;
     }
   }
 

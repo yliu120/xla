@@ -1,5 +1,5 @@
-#ifndef XLA_SERVICE_GPU_SEND_RECV_PARTITIONER_H_
-#define XLA_SERVICE_GPU_SEND_RECV_PARTITIONER_H_
+#ifndef XLA_SERVICE_GPU_CUSTOM_CALL_PARTITIONERS_H_
+#define XLA_SERVICE_GPU_CUSTOM_CALL_PARTITIONERS_H_
 
 #include <optional>
 
@@ -12,9 +12,10 @@ namespace xla::gpu::spmd {
 
 constexpr char kSendCustomCall[] = "xla.gpu.send";
 constexpr char kRecvCustomCall[] = "xla.gpu.recv";
+constexpr char kZerosCustomCall[] = "xla.gpu.zeros";
 
 // Custom-call partitioner GPU send/recv custom calls.
-class SendRecvPartitioner : public CustomCallPartitioner {
+class PassThroughPartitioner : public CustomCallPartitioner {
  public:
   bool IsCustomCallShardable(const HloInstruction* instruction) const override {
     return true;
@@ -45,4 +46,4 @@ class SendRecvPartitioner : public CustomCallPartitioner {
 
 }  // namespace xla::gpu::spmd
 
-#endif  // XLA_SERVICE_GPU_SEND_RECV_PARTITIONER_H_
+#endif  // XLA_SERVICE_GPU_CUSTOM_CALL_PARTITIONERS_H_

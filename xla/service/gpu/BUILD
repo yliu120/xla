@@ -1371,6 +1371,7 @@ cc_library(
         ":compile_module_to_llvm_ir",
         ":conv_layout_normalization",
         ":cublas_cudnn",
+        ":custom_call_partitioners",
         ":executable_proto_cc",
         ":execution_stream_assignment",
         ":flag_utils",
@@ -1398,7 +1399,6 @@ cc_library(
         ":prepare_hlo_for_ir_emitting_pipeline",
         ":reduction_utils",
         ":runtime_intrinsics",
-        ":send_recv_partitioner",
         ":stream_executor_util",
         "@com_google_absl//absl/base",
         "@com_google_absl//absl/container:flat_hash_map",
@@ -3313,8 +3313,8 @@ cc_library(
 
 
 cc_library(
-    name = "send_recv_partitioner",
-    hdrs = ["send_recv_partitioner.h"],
+    name = "custom_call_partitioners",
+    hdrs = ["custom_call_partitioners.h"],
     deps = [
         "//xla/hlo/ir:hlo",
         "//xla/service:custom_call_sharding_helper",

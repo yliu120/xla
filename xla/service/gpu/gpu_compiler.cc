@@ -154,6 +154,7 @@ limitations under the License.
 #include "xla/service/gpu/compile_module_to_llvm_ir.h"
 #include "xla/service/gpu/conv_layout_normalization.h"
 #include "xla/service/gpu/cublas_cudnn.h"
+#include "xla/service/gpu/custom_call_partitioners.h"
 #include "xla/service/gpu/execution_stream_assignment.h"
 #include "xla/service/gpu/flag_utils.h"
 #include "xla/service/gpu/fusion_dispatch_pipeline.h"
@@ -179,7 +180,6 @@ limitations under the License.
 #include "xla/service/gpu/reduce_scatter_combiner.h"
 #include "xla/service/gpu/reduction_utils.h"
 #include "xla/service/gpu/runtime_intrinsics.h"
-#include "xla/service/gpu/send_recv_partitioner.h"
 #include "xla/service/gpu/stream_executor_util.h"
 #include "xla/service/gpu/transforms/algebraic_simplifier.h"
 #include "xla/service/gpu/transforms/algorithm_checker.h"
@@ -608,9 +608,14 @@ absl::Status RunSPMDPasses(
     ABSL_CONST_INIT static absl::once_flag did_registration;
     absl::call_once(did_registration, [] {
       RegisterCustomCallPartitioner(
-          spmd::kSendCustomCall, std::make_unique<spmd::SendRecvPartitioner>());
+          spmd::kSendCustomCall,
+          std::make_unique<spmd::PassThroughPartitioner>());
       RegisterCustomCallPartitioner(
-          spmd::kRecvCustomCall, std::make_unique<spmd::SendRecvPartitioner>());
+          spmd::kRecvCustomCall,
+          std::make_unique<spmd::PassThroughPartitioner>());
+      RegisterCustomCallPartitioner(
+          spmd::kZerosCustomCall,
+          std::make_unique<spmd::PassThroughPartitioner>());
     });
     HloPassPipeline spmd_pipeline("spmd-partitioner");
     AddSPMDPasses(hlo_module, layout_insensitive_algsimp_opts,
