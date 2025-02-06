@@ -3448,6 +3448,8 @@ cc_library(
     srcs = ["send_recv_decomposer.cc"],
     hdrs = ["send_recv_decomposer.h"],
     deps = [
+        "//xla:shape_util",
+        "//xla:status_macros",
         "//xla/hlo/ir:hlo",
         "//xla/hlo/pass:hlo_pass",
         "//xla/hlo/transforms/simplifiers:hlo_dce",
@@ -3463,5 +3465,22 @@ cc_library(
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Parser",
         "@llvm-project//mlir:Support",
+    ],
+)
+
+xla_cc_test(
+    name = "send_recv_decomposer_test",
+    srcs = ["send_recv_decomposer_test.cc"],
+    deps = [
+        ":send_recv_decomposer",
+        "//xla/hlo/ir:hlo",
+        "//xla/hlo/pass:hlo_pass",
+        "//xla/tests:hlo_test_base",
+        "//xla/tests:test_utils",
+        "//xla/tsl/lib/core:status_test_util",
+        "//xla/tsl/platform:statusor",
+        "//xla/tsl/platform:test",
+        "@com_google_absl//absl/log",
+        "@com_google_googletest//:gtest_main",
     ],
 )

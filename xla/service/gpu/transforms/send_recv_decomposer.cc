@@ -16,6 +16,7 @@
 #include "xla/hlo/ir/hlo_casting_utils.h"
 #include "xla/hlo/transforms/simplifiers/hlo_dce.h"
 #include "xla/hlo/utils/hlo_query.h"
+#include "xla/literal_util.h"
 #include "xla/service/collective_ops_utils.h"
 #include "xla/tsl/platform/errors.h"
 
@@ -90,13 +91,12 @@ absl::Status DecomposeSend(HloCustomCallInstruction* custom_call,
                            int64_t& next_channel_id) {
   HloComputation* comp = custom_call->parent();
 
-  HloInstruction* token = nullptr;
-  if (custom_call->unique_operands().size() == 1) {
-    auto* token = comp->AddInstruction(HloInstruction::CreateToken());
-  } else {
-    auto* token = comp->AddInstruction(
-        HloInstruction::CreateAfterAll({custom_call->mutable_operand(1)}));
-  }
+  HloInstruction* token =
+      (custom_call->unique_operands().size() == 1)
+          ? comp->AddInstruction(HloInstruction::CreateToken())
+          : comp->AddInstruction(HloInstruction::CreateAfterAll(
+                {custom_call->mutable_operand(1)}));
+
   auto* send = comp->AddInstruction(
       HloInstruction::CreateSend(custom_call->mutable_operand(0), token,
                                  next_channel_id, /*is_host_transfer=*/false));
@@ -141,9 +141,17 @@ absl::Status DecomposeRecv(HloCustomCallInstruction* custom_call,
 
 absl::Status DecomposeZeros(HloCustomCallInstruction* custom_call) {
   HloComputation* comp = custom_call->parent();
-  TF_RETURN_IF_ERROR(
-      custom_call->ReplaceAllUsesWith(custom_call->mutable_operand(0)));
+  auto* token = comp->AddInstruction(
+      HloInstruction::CreateAfterAll({custom_call->mutable_operand(0)}));
+  auto* zero = comp->AddInstruction(HloInstruction::CreateConstant(
+      LiteralUtil::Zero(custom_call->shape().element_type())));
+  auto* broadcast = comp->AddInstruction(
+      HloInstruction::CreateBroadcast(custom_call->shape(), zero, {}));
+  auto* add_dependency = comp->AddInstruction(
+      HloInstruction::CreateAddDependency(broadcast, token));
+  TF_RETURN_IF_ERROR(custom_call->ReplaceAllUsesWith(add_dependency));
   TF_RETURN_IF_ERROR(comp->RemoveInstruction(custom_call));
+  return absl::OkStatus();
 }
 }  // namespace
 
