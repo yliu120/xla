@@ -1371,6 +1371,7 @@ cc_library(
         ":compile_module_to_llvm_ir",
         ":conv_layout_normalization",
         ":cublas_cudnn",
+        ":custom_call_partitioners",
         ":executable_proto_cc",
         ":execution_stream_assignment",
         ":flag_utils",
@@ -1536,6 +1537,7 @@ cc_library(
         "//xla/service/gpu/transforms:sanitize_constant_names",
         "//xla/service/gpu/transforms:scatter_expander",
         "//xla/service/gpu/transforms:scatter_slice_simplifier",
+        "//xla/service/gpu/transforms:send_recv_decomposer",
         "//xla/service/gpu/transforms:softmax_rewriter_triton",
         "//xla/service/gpu/transforms:sort_rewriter",
         "//xla/service/gpu/transforms:stream_attribute_annotator",
@@ -3311,5 +3313,16 @@ cc_library(
         "@com_google_absl//absl/synchronization",
         "@tsl//tsl/profiler/lib:traceme",
         "@tsl//tsl/profiler/lib:traceme_encode",
+    ],
+)
+
+
+cc_library(
+    name = "custom_call_partitioners",
+    hdrs = ["custom_call_partitioners.h"],
+    deps = [
+        "//xla/hlo/ir:hlo",
+        "//xla/service:custom_call_sharding_helper",
+        "//xla/service/spmd:spmd_partitioner",
     ],
 )
