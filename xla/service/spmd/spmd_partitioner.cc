@@ -649,9 +649,12 @@ PartitionedHlo PartitionedHlo::ReshardNoCache(
   }
 
   // 'Replicated' to 'Tiled'.
+  auto shard_shape = MakePartitionedShape(shape, target);
+  if (shard_shape == shape) {
+    return *this;
+  }
   auto padded_hlo = PadBaseShapeBeforeUnevenTiledSharding(
       hlo_, target, state_.b, std::move(pad_value));
-  auto shard_shape = MakePartitionedShape(shape, target);
   auto slice = state_.b->AddInstruction(HloInstruction::CreateDynamicSlice(
       shard_shape, padded_hlo,
       MakePartitionOffsets(shape, target, state_.partition_id, state_.b),

@@ -616,6 +616,9 @@ absl::Status RunSPMDPasses(
       RegisterCustomCallPartitioner(
           spmd::kZerosCustomCall,
           std::make_unique<spmd::PassThroughPartitioner>());
+      RegisterCustomCallPartitioner(
+          spmd::kAfterAllCustomCall,
+          std::make_unique<spmd::PassThroughPartitioner>());
     });
     HloPassPipeline spmd_pipeline("spmd-partitioner");
     AddSPMDPasses(hlo_module, layout_insensitive_algsimp_opts,

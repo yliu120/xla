@@ -2,6 +2,7 @@
 #define XLA_SERVICE_GPU_CUSTOM_CALL_PARTITIONERS_H_
 
 #include <optional>
+#include <vector>
 
 #include "xla/hlo/ir/hlo_instruction.h"
 #include "xla/hlo/ir/hlo_sharding.h"
@@ -13,6 +14,7 @@ namespace xla::gpu::spmd {
 constexpr char kSendCustomCall[] = "xla.gpu.send";
 constexpr char kRecvCustomCall[] = "xla.gpu.recv";
 constexpr char kZerosCustomCall[] = "xla.gpu.zeros";
+constexpr char kAfterAllCustomCall[] = "AfterAll";
 
 // Custom-call partitioner GPU send/recv custom calls.
 class PassThroughPartitioner : public CustomCallPartitioner {
@@ -27,6 +29,17 @@ class PassThroughPartitioner : public CustomCallPartitioner {
     // In the future, we may need to be careful here to make sure send and
     // recv are partitioned in the same way, otherwise the result will be
     // incorrect.
+    if (hlo->custom_call_target() == kAfterAllCustomCall) {
+      std::vector<HloInstruction*> new_operands;
+      for (HloInstruction* operand : hlo->operands()) {
+        new_operands.push_back(partitioner->GetPartitionedHlo(operand).hlo());
+      }
+      partitioner->SetPartitionedHlo(hlo, [&] {
+        return partitioner->builder()->AddInstruction(
+            hlo->CloneWithNewOperands(hlo->shape(), new_operands));
+      });
+      return absl::OkStatus();
+    }
     return partitioner->HandleElementwise(hlo);
   }
 

@@ -3449,6 +3449,7 @@ cc_library(
     hdrs = ["send_recv_decomposer.h"],
     deps = [
         "//xla:shape_util",
+        "//xla:side_effect_util",
         "//xla:status_macros",
         "//xla/hlo/ir:hlo",
         "//xla/hlo/pass:hlo_pass",

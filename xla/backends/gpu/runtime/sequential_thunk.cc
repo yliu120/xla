@@ -83,6 +83,9 @@ absl::Status SequentialThunk::ExecuteOnStream(const ExecuteParams& params) {
     if (params.mock_collectives && thunk->IsCollective()) {
       continue;
     }
+    VLOG(2) << "Execute thunk: " << thunk->ToString(2)
+            << " profile: " << thunk->profile_annotation() << " on device "
+            << params.stream->parent()->device_ordinal();
     TF_RETURN_IF_ERROR(thunk->ExecuteOnStream(params));
   }
   return absl::OkStatus();

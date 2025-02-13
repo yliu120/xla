@@ -18,6 +18,7 @@
 #include "xla/hlo/utils/hlo_query.h"
 #include "xla/literal_util.h"
 #include "xla/service/collective_ops_utils.h"
+#include "xla/side_effect_util.h"
 #include "xla/tsl/platform/errors.h"
 
 namespace xla::gpu {
@@ -26,7 +27,9 @@ namespace {
 constexpr absl::string_view kSendCustomCallName = "xla.gpu.send";
 constexpr absl::string_view kRecvCustomCallName = "xla.gpu.recv";
 constexpr absl::string_view kZerosCustomCallName = "xla.gpu.zeros";
+constexpr absl::string_view kAfterAllCustomCallName = "AfterAll";
 constexpr absl::string_view kPermAttrName = "perm";
+constexpr absl::string_view kPipelineSendRecvChannel = "10";
 
 // TODO: Uses upstream class after rebasing.
 using SourceTargetPairs = std::vector<std::pair<int64_t, int64_t>>;
@@ -84,6 +87,8 @@ FrontendAttributes MakeSendRecvFrontendAttributes(
                                    old_attributes.map().end());
   (*attributes.mutable_map())[kSendRecvSourceTargetPairsAttr] =
       source_target_pairs_str;
+  (*attributes.mutable_map())[kXlaStreamAnnotationAttr] =
+      kPipelineSendRecvChannel;
   return attributes;
 }
 
@@ -153,6 +158,15 @@ absl::Status DecomposeZeros(HloCustomCallInstruction* custom_call) {
   TF_RETURN_IF_ERROR(comp->RemoveInstruction(custom_call));
   return absl::OkStatus();
 }
+
+absl::Status DecomposeAfterAll(HloCustomCallInstruction* custom_call) {
+  HloComputation* comp = custom_call->parent();
+  auto* token = comp->AddInstruction(
+      HloInstruction::CreateAfterAll({custom_call->mutable_operand(0)}));
+  TF_RETURN_IF_ERROR(custom_call->ReplaceAllUsesWithDifferentShape(token));
+  TF_RETURN_IF_ERROR(comp->RemoveInstruction(custom_call));
+  return absl::OkStatus();
+}
 }  // namespace
 
 absl::StatusOr<bool> SendRecvDecomposer::Run(
@@ -173,6 +187,8 @@ absl::StatusOr<bool> SendRecvDecomposer::Run(
         TF_RETURN_IF_ERROR(DecomposeRecv(custom_call, next_channel_id));
       } else if (custom_call->custom_call_target() == kZerosCustomCallName) {
         TF_RETURN_IF_ERROR(DecomposeZeros(custom_call));
+      } else if (custom_call->custom_call_target() == kAfterAllCustomCallName) {
+        TF_RETURN_IF_ERROR(DecomposeAfterAll(custom_call));
       }
       modified = true;
     }
