@@ -144,6 +144,8 @@ absl::Status NcclRecvThunk::RunNcclCollective(const ExecuteParams& params,
     // the destination buffer.
     VLOG(3) << absl::StreamFormat("%s : Recv: Issuing MemZero", device_string);
     TF_RETURN_IF_ERROR(stream.MemZero(&dest_addr, dest_addr.size()));
+    VLOG(3) << "Done Recv from device ordinal: " << device_ordinal
+            << ", current_id: " << current_id << " (" << hlo_name_ << ")";
   }
   return absl::OkStatus();
 }

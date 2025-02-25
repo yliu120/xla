@@ -20,14 +20,14 @@
 #include "xla/service/collective_ops_utils.h"
 #include "xla/side_effect_util.h"
 #include "xla/tsl/platform/errors.h"
+#include "xla/tsl/platform/status.h"
 
 namespace xla::gpu {
 namespace {
 
 constexpr absl::string_view kSendCustomCallName = "xla.gpu.send";
 constexpr absl::string_view kRecvCustomCallName = "xla.gpu.recv";
-constexpr absl::string_view kZerosCustomCallName = "xla.gpu.zeros";
-constexpr absl::string_view kAfterAllCustomCallName = "AfterAll";
+constexpr absl::string_view kFollowMeCustomCallName = "FollowMe";
 constexpr absl::string_view kPermAttrName = "perm";
 constexpr absl::string_view kPipelineSendRecvChannel = "10";
 
@@ -144,29 +144,42 @@ absl::Status DecomposeRecv(HloCustomCallInstruction* custom_call,
   return absl::OkStatus();
 }
 
-absl::Status DecomposeZeros(HloCustomCallInstruction* custom_call) {
+absl::Status DecomposeFollowMe(HloCustomCallInstruction* custom_call) {
   HloComputation* comp = custom_call->parent();
-  auto* token = comp->AddInstruction(
-      HloInstruction::CreateAfterAll({custom_call->mutable_operand(0)}));
-  auto* zero = comp->AddInstruction(HloInstruction::CreateConstant(
-      LiteralUtil::Zero(custom_call->shape().element_type())));
-  auto* broadcast = comp->AddInstruction(
-      HloInstruction::CreateBroadcast(custom_call->shape(), zero, {}));
-  auto* add_dependency = comp->AddInstruction(
-      HloInstruction::CreateAddDependency(broadcast, token));
-  TF_RETURN_IF_ERROR(custom_call->ReplaceAllUsesWith(add_dependency));
-  TF_RETURN_IF_ERROR(comp->RemoveInstruction(custom_call));
+
+  // The FollowMe custom call is currently only used for wiring tangents
+  // to the schedule after input. Here is how the rewrite happens,
+  //
+  // follow-me = custom-call(to-follow), call_target_name="FollowMe"
+  // add = add(tangent, follow-me)
+  // =>
+  // token = after-all(to-follow)
+  // add-dependency = add-dependency(tangent, token)
+  // ... Replaces add use with add-dependency.
+  auto* parent_comp = custom_call->parent();
+  for (auto* user : custom_call->users()) {
+    CHECK(user->opcode() == HloOpcode::kAdd)
+        << "FollowMe custom call is only expected to be used by Add ops.";
+    auto operands = user->mutable_operands();
+    auto* replacement = operands[0] == custom_call ? operands[1] : operands[0];
+    
+    auto* after_all = parent_comp->AddInstruction(
+        HloInstruction::CreateAfterAll({custom_call->mutable_operand(0)}));
+    auto* add_dependency = parent_comp->AddInstruction(
+        HloInstruction::CreateAddDependency(replacement, after_all));
+    TF_RETURN_IF_ERROR(user->ReplaceAllUsesWith(add_dependency));
+  }
   return absl::OkStatus();
 }
 
-absl::Status DecomposeAfterAll(HloCustomCallInstruction* custom_call) {
-  HloComputation* comp = custom_call->parent();
-  auto* token = comp->AddInstruction(
-      HloInstruction::CreateAfterAll({custom_call->mutable_operand(0)}));
-  TF_RETURN_IF_ERROR(custom_call->ReplaceAllUsesWithDifferentShape(token));
-  TF_RETURN_IF_ERROR(comp->RemoveInstruction(custom_call));
-  return absl::OkStatus();
-}
+// absl::Status DecomposeAfterAll(HloCustomCallInstruction* custom_call) {
+//   HloComputation* comp = custom_call->parent();
+//   auto* token = comp->AddInstruction(
+//       HloInstruction::CreateAfterAll({custom_call->mutable_operand(0)}));
+//   TF_RETURN_IF_ERROR(custom_call->ReplaceAllUsesWithDifferentShape(token));
+//   TF_RETURN_IF_ERROR(comp->RemoveInstruction(custom_call));
+//   return absl::OkStatus();
+// }
 }  // namespace
 
 absl::StatusOr<bool> SendRecvDecomposer::Run(
@@ -185,10 +198,8 @@ absl::StatusOr<bool> SendRecvDecomposer::Run(
         TF_RETURN_IF_ERROR(DecomposeSend(custom_call, next_channel_id));
       } else if (custom_call->custom_call_target() == kRecvCustomCallName) {
         TF_RETURN_IF_ERROR(DecomposeRecv(custom_call, next_channel_id));
-      } else if (custom_call->custom_call_target() == kZerosCustomCallName) {
-        TF_RETURN_IF_ERROR(DecomposeZeros(custom_call));
-      } else if (custom_call->custom_call_target() == kAfterAllCustomCallName) {
-        TF_RETURN_IF_ERROR(DecomposeAfterAll(custom_call));
+      } else if (custom_call->custom_call_target() == kFollowMeCustomCallName) {
+        TF_RETURN_IF_ERROR(DecomposeFollowMe(custom_call));
       }
       modified = true;
     }

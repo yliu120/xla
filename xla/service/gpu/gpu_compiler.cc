@@ -614,10 +614,7 @@ absl::Status RunSPMDPasses(
           spmd::kRecvCustomCall,
           std::make_unique<spmd::PassThroughPartitioner>());
       RegisterCustomCallPartitioner(
-          spmd::kZerosCustomCall,
-          std::make_unique<spmd::PassThroughPartitioner>());
-      RegisterCustomCallPartitioner(
-          spmd::kAfterAllCustomCall,
+          spmd::kFollowMeCustomCall,
           std::make_unique<spmd::PassThroughPartitioner>());
     });
     HloPassPipeline spmd_pipeline("spmd-partitioner");
@@ -666,7 +663,6 @@ absl::Status RunOptimizationPasses(
   pipeline.AddPass<TopKSplitter>();
   pipeline.AddPass<TopkSpecializer>();
   pipeline.AddPass<TopkDecomposer>();
-  pipeline.AddPass<SendRecvDecomposer>();
 
   HloPredicate upcaster_filter = [&](const HloInstruction* instr) {
     const auto* cuda_cc = std::get_if<se::CudaComputeCapability>(
@@ -965,6 +961,7 @@ absl::Status RunCollectiveOptimizationPasses(
   }
 
   collectives_pipeline.AddPass<ReduceScatterCreator>();
+  collectives_pipeline.AddPass<SendRecvDecomposer>();
 
   collectives_pipeline.AddPass<CollectivePermuteCycleDecomposer>(
       hlo_module->config()

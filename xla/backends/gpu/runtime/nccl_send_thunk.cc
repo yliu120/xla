@@ -139,6 +139,9 @@ absl::Status NcclSendThunk::RunNcclCollective(const ExecuteParams& params,
           src_addr, buffer.element_type, buffer.element_count,
           RankId(*target_id), GpuCollectives::On(stream)));
     }
+    VLOG(3) << "Done Send from device ordinal: " << device_ordinal
+          << ", current_id: " << current_id
+          << " (" << hlo_name_ << ")";
   }
 
   return absl::OkStatus();
