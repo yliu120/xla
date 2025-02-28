@@ -171,15 +171,6 @@ absl::Status DecomposeFollowMe(HloCustomCallInstruction* custom_call) {
   }
   return absl::OkStatus();
 }
-
-// absl::Status DecomposeAfterAll(HloCustomCallInstruction* custom_call) {
-//   HloComputation* comp = custom_call->parent();
-//   auto* token = comp->AddInstruction(
-//       HloInstruction::CreateAfterAll({custom_call->mutable_operand(0)}));
-//   TF_RETURN_IF_ERROR(custom_call->ReplaceAllUsesWithDifferentShape(token));
-//   TF_RETURN_IF_ERROR(comp->RemoveInstruction(custom_call));
-//   return absl::OkStatus();
-// }
 }  // namespace
 
 absl::StatusOr<bool> SendRecvDecomposer::Run(
