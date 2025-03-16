@@ -151,6 +151,7 @@ limitations under the License.
 #include "xla/service/gpu/compile_module_to_llvm_ir.h"
 #include "xla/service/gpu/conv_layout_normalization.h"
 #include "xla/service/gpu/cublas_cudnn.h"
+#include "xla/service/gpu/custom_call_partitioners.h"
 #include "xla/service/gpu/execution_stream_assignment.h"
 #include "xla/service/gpu/flag_utils.h"
 #include "xla/service/gpu/fusion_dispatch_pipeline.h"
@@ -182,6 +183,7 @@ limitations under the License.
 #include "xla/service/gpu/transforms/all_reduce_blueconnect.h"
 #include "xla/service/gpu/transforms/all_reduce_splitter.h"
 #include "xla/service/gpu/transforms/async_wrapper.h"
+#include "xla/service/gpu/transforms/check_error_decomposer.h"
 #include "xla/service/gpu/transforms/collective_permute_cycle_decomposer.h"
 #include "xla/service/gpu/transforms/collective_permute_valid_iteration_annotator.h"
 #include "xla/service/gpu/transforms/collective_select_folder.h"
@@ -596,6 +598,12 @@ absl::Status RunSPMDPasses(
 
   const int64_t num_partitions = hlo_module->config().num_partitions();
   if (num_partitions > 1 && hlo_module->config().use_spmd_partitioning()) {
+    // Register custom-call partitioners.
+    ABSL_CONST_INIT static absl::once_flag did_registration;
+    absl::call_once(did_registration, [] {
+      RegisterCustomCallPartitioner(
+          spmd::kCheckErrorCustomCall, std::make_unique<spmd::PassThroughPartitioner>());
+    });
     HloPassPipeline spmd_pipeline("spmd-partitioner");
     AddSPMDPasses(hlo_module, layout_insensitive_algsimp_opts,
                   gpu_target_config.device_description.gpu_compute_capability(),
@@ -1262,6 +1270,12 @@ absl::Status RunDynamicSliceFusionPasses(HloModule* hlo_module,
   return absl::OkStatus();
 }
 
+absl::Status RunPostSpmdCustomCallDecomposePasses(HloModule* hlo_module) {
+  HloPassPipeline pipeline("post-spmd-custom-call-decomposer");
+  pipeline.AddPass<CheckErrorDecomposer>();
+  TF_RETURN_IF_ERROR(pipeline.Run(hlo_module).status());
+}
+
 }  // namespace
 
 absl::Status GpuCompiler::RunCollectiveScheduleLinearizerPasses(
@@ -1317,6 +1331,7 @@ absl::Status GpuCompiler::OptimizeHloModule(
       hlo_module, gpu_version, dnn_version,
       gpu_target_config.device_description.runtime_version()));
 
+  TF_RETURN_IF_ERROR(RunPostSpmdCustomCallDecomposePasses(hlo_module));
   TF_RETURN_IF_ERROR(
       RunLayoutAssignmentPasses(hlo_module, gpu_version, dnn_version,
                                 gpu_target_config.device_description));
