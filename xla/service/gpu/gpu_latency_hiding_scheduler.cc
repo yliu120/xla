@@ -37,6 +37,7 @@ limitations under the License.
 #include "xla/service/latency_hiding_scheduler.h"
 #include "xla/shape.h"
 #include "xla/shape_util.h"
+#include "xla/stream_executor/stream_executor.h"
 
 namespace xla {
 namespace gpu {
@@ -58,6 +59,9 @@ static constexpr int64_t kCostlyP2PRecvMultiplier = 6;
 // this does not mean that these collectives run in parallel but synchronisation
 // may not happen after each one of them.
 static constexpr int64_t kNumAsyncCollectivesP2P = 4;
+
+// Number of host offloading operations that can be in flight at the same time.
+static constexpr int64_t kNumAsyncMemcpy = 32;
 
 // Classifies `hlo` instruction as noop or not.
 bool IsNopInstruction(const HloInstruction& hlo) {
@@ -115,6 +119,28 @@ std::pair<GpuResourceType, ResourceUsageType> GetP2PResourceAndUsage(
   return {resource, usage};
 }
 
+bool ShapeHasHostMemorySpace(const Shape& shape) {
+  return shape.IsArray() && shape.has_layout() &&
+         shape.layout().memory_space() ==
+             static_cast<int64_t>(stream_executor::MemoryType::kHost);
+}
+
+bool IsHostOffloadOp(const HloInstruction& hlo) {
+  if (hlo.opcode() == HloOpcode::kFusion) {
+    return ShapeHasHostMemorySpace(hlo.shape()) ||
+           ShapeHasHostMemorySpace(hlo.operand(0)->shape());
+  }
+  return false;
+}
+
+bool IsHostOffloadAsyncOp(const HloInstruction& hlo) {
+  if (hlo.opcode() != HloOpcode::kAsyncStart &&
+      hlo.opcode() != HloOpcode::kAsyncDone) {
+    return false;
+  }
+  return IsHostOffloadOp(*hlo.async_wrapped_instruction());
+}
+
 // Marks async start operations to be scheduled as early as possible.
 // It allows maximum overlap of operations while respecting dependencies.
 // Besides async collectives, copy-start is async memcpy D2H/H2D, the beginning
@@ -123,7 +149,7 @@ bool IsGpuAsyncStart(const HloInstruction& hlo) {
   return (hlo_query::IsAsyncCollectiveStartOp(&hlo,
                                               /*include_send_recv=*/true) &&
           !IsGPUSyncCollective(hlo)) ||
-         IsAsyncComputeOp(hlo) || hlo.opcode() == HloOpcode::kCopyStart;
+         IsAsyncComputeOp(hlo) || hlo.opcode() == HloOpcode::kCopyStart || IsHostOffloadAsyncOp(hlo);
 }
 
 // Marks async done operations to be scheduled as late as possible.
@@ -131,7 +157,7 @@ bool IsGpuAsyncDone(const HloInstruction& hlo) {
   return (hlo_query::IsAsyncCollectiveDoneOp(&hlo,
                                              /*include_send_recv=*/true) &&
           !IsGPUSyncCollective(*hlo.operand(0))) ||
-         IsAsyncComputeOp(hlo) || hlo.opcode() == HloOpcode::kCopyDone;
+         IsAsyncComputeOp(hlo) || hlo.opcode() == HloOpcode::kCopyDone || IsHostOffloadAsyncOp(hlo);
 }
 
 bool IsAsyncPair(const HloInstruction& from, const HloInstruction& target) {
@@ -428,6 +454,11 @@ int64_t GpuAsyncTracker::GetNumAvailableResources(int64_t resource_type) const {
   if (resource_type ==
       ResourceTypeToIndex(GpuResourceType::kGpuAsyncStreamCollectivesP2P)) {
     return kNumAsyncCollectivesP2P;
+  }
+
+  if (resource_type ==
+      ResourceTypeToIndex(GpuResourceType::kGpuAsyncStreamMemcpy)) {
+    return kNumAsyncMemcpy;
   }
 
   return 1;

@@ -70,6 +70,9 @@ absl::StatusOr<bool> RewriteAllocatePersistentBuffer(
   } else if (memory_space_str == "host") {
     operand->mutable_shape()->mutable_layout()->set_memory_space(
         static_cast<int64_t>(stream_executor::MemoryType::kHost));
+  } else if (memory_space_str == "device") {
+    operand->mutable_shape()->mutable_layout()->set_memory_space(
+        static_cast<int64_t>(stream_executor::MemoryType::kDevice));
   } else {
     return Internal("Unsupported memory space.");
   }
